@@ -54,19 +54,33 @@ PROJECT_DETECT_OBJECT — Real-time Object Recognition System (YOLOv11 + SAM2.1 
 PROJECT_DETECT_OBJECT/
 ## <!-- 
 ├── 📁 NOTEBOOK_TO_REPORT
+
 │   ├── 📄 Analyst_accuracy_segement.ipynb
+
 │   ├── 📄 Analyst_accuracy_yolo.ipynb
+
 │   ├── 📄 automatic_mask_generator_example.ipynb
+
 │   ├── 📄 image_predictor_example.ipynb
+
 │   └── 📄 video_predictor_example.ipynb
+
 ├── 📁 configs
+
 │   ├── 📁 sam2.1
+
 │   │   ├── ⚙️ sam2.1_hiera_b+.yaml
+
 │   │   ├── ⚙️ sam2.1_hiera_l.yaml
+
 │   │   ├── ⚙️ sam2.1_hiera_s.yaml
+
 │   │   ├── ⚙️ sam2.1_hiera_t.yaml
+
 │   │   └── ⚙️ sam2.1_hiera_t.yaml.fixed.yaml.fixed.yaml
+
 │   ├── 📁 sam2.1_training
+
 │   │   └── ⚙️ sam2.1_hiera_b+_MOSE_finetune.yaml
 │   └── 📁 yolo
 │       └── ⚙️ yolo_learning_tools.yaml
