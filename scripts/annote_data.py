@@ -3,6 +3,24 @@ import numpy as np
 from tqdm import tqdm
 from ultralytics import YOLO
 from datetime import datetime
+from roboflow import Roboflow
+import supervision as sv
+
+
+RF_API_KEY = "utF5EVgFHoqC0xPQRuz4"
+CLASSES = [
+    "person","bicycle","car","motorcycle","airplane","bus","train","truck","boat",
+    "traffic_light","fire_hydrant","stop_sign","parking_meter","bench","bird","cat",
+    "dog","horse","sheep","cow","elephant","bear","zebra","giraffe","backpack",
+    "umbrella","handbag","tie","suitcase","frisbee","skis","snowboard","sports_ball",
+    "kite","baseball_bat","baseball_glove","skateboard","surfboard","tennis_racket",
+    "bottle","wine_glass","cup","fork","knife","spoon","bowl","banana","apple",
+    "sandwich","orange","brocolli","carrot","hot_dog","pizza","donut","cake","chair",
+    "couch","potted_plant","bed","dining_table","toilet","tv","laptop","mouse",
+    "remote","keyboard","cell_phone","microwave","oven","toaster","sink","refrigerator",
+    "book","clock","vase","scissors","teddy_bear","hair_drier","toothbrush"
+]
+
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
@@ -19,13 +37,13 @@ except Exception as e:
     print("[ERROR] Import failed:", e)
     raise
 
-CHECKPOINT_YOLO = os.path.join(PROJECT_ROOT, "checkpoints", "yolo11n.pt")
+CHECKPOINT_YOLO = os.path.join(PROJECT_ROOT, "checkpoints", "yolo11m.pt")
 CHECKPOINT_SAM = os.path.join(PROJECT_ROOT, "checkpoints", "sam2.1_hiera_base_plus.pt")
 CONFIG_SAM = os.path.join(PROJECT_ROOT, "configs", "sam2.1", "sam2.1_hiera_b+.yaml")
 
-RAW_DIR = os.path.join(PROJECT_ROOT, "data", "processed")
+RAW_DIR = os.path.join(PROJECT_ROOT, "data", "resize")
 
-HYBRID_DATA_DIR = os.path.join(PROJECT_ROOT, "data", "hybrid_data")
+HYBRID_DATA_DIR = os.path.join(PROJECT_ROOT, "data", "hybrid_data_test")
 YOLO_DATA_DIR = os.path.join(PROJECT_ROOT, "data", "hybrid_data_yolo")
 os.makedirs(HYBRID_DATA_DIR, exist_ok=True)
 os.makedirs(YOLO_DATA_DIR, exist_ok=True)
@@ -56,10 +74,29 @@ image_id, ann_id = 1, 1
 
 print(f"[START] Scanning folder: {RAW_DIR}")
 
-images, annotations, categories = [], [], {}
-image_id, ann_id = 1, 1
+print("loading Roboflow workspace...")
 
-print(f"[START] Scanning folder: {RAW_DIR}")
+rf = Roboflow(api_key=RF_API_KEY)
+
+workspace = rf.workspace()  
+print("Workspace URL:", workspace.url)
+
+try:
+    project = workspace.create_project(
+        project_name="auto-annotation-yolo-sam",
+        project_type="instance-segmentation",
+        project_license="MIT",
+        annotation="polygon"
+    )
+    print("[ROBOFLOW] Project created.")
+except Exception as e:
+    print("[ROBOFLOW] Project already exists, loading existing one...")
+
+    project = workspace.project("auto-annotation-yolo-sam")
+
+
+
+print("[ROBOFLOW] Project created:", project)
 
 def nms_numpy(boxes, iou_thresh=0.5):
 
@@ -90,21 +127,9 @@ def nms_numpy(boxes, iou_thresh=0.5):
         boxes = boxes[iou < iou_thresh]
     return np.array(keep)
 
-
 for root, _, files in os.walk(RAW_DIR):
-    label = os.path.basename(root)
-    if label == os.path.basename(RAW_DIR):
-        continue
 
-for root, _, files in os.walk(RAW_DIR):
-    label = os.path.basename(root)
-    if label == os.path.basename(RAW_DIR):
-        continue
-
-    if label not in categories:
-        categories[label] = len(categories) + 1
-
-    for file_name in tqdm(files, desc=f"Processing {label}"):
+    for file_name in tqdm(files, desc="Processing images"):
         if not file_name.lower().endswith((".jpg", ".jpeg", ".png")):
             continue
 
@@ -125,58 +150,86 @@ for root, _, files in os.walk(RAW_DIR):
         has_valid_box = False
         overlay = img.copy()
 
-        boxes = raw_boxes.xyxy.cpu().numpy()
-        confidences = raw_boxes.conf.cpu().numpy()
+        xyxy = raw_boxes.xyxy.cpu().numpy()
+        conf = raw_boxes.conf.cpu().numpy()
+        cls = raw_boxes.cls.cpu().numpy()
 
-        boxes = nms_numpy(boxes, iou_thresh=0.5)
+        dets = []
+        for i in range(len(xyxy)):
+            dets.append({
+                "xyxy": xyxy[i],
+                "conf": float(conf[i]),
+                "cls": int(cls[i])
+            })
 
-        for i, box in enumerate(boxes):
-            x1, y1, x2, y2 = map(int, box)
-            conf = float(confidences[i]) if i < len(confidences) else 0.0
-            if conf < 0.4:
-                continue
+        dets = sorted(dets, key=lambda x: x["conf"], reverse=True)
+
+        filtered = []
+        while len(dets) > 0:
+            best = dets[0]
+            filtered.append(best)
+
+            remains = []
+            for other in dets[1:]:
+                boxA = best["xyxy"]
+                boxB = other["xyxy"]
+
+                xx1 = max(boxA[0], boxB[0])
+                yy1 = max(boxA[1], boxB[1])
+                xx2 = min(boxA[2], boxB[2])
+                yy2 = min(boxA[3], boxB[3])
+
+                inter = max(0, xx2 - xx1) * max(0, yy2 - yy1)
+                areaA = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
+                areaB = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
+                iou = inter / (areaA + areaB - inter + 1e-6)
+
+                if iou < 0.5:
+                    remains.append(other)
+
+            dets = remains
+
+
+        for det in filtered:
+            x1, y1, x2, y2 = map(int, det["xyxy"])
+            conf = det["conf"]
+            cls_id = det["cls"]
+
+            label = CLASSES[cls_id]
+
+            if label not in categories:
+                categories[label] = len(categories) + 1
 
             pad = 15
             x1p = max(0, x1 - pad)
             y1p = max(0, y1 - pad)
             x2p = min(w, x2 + pad)
             y2p = min(h, y2 + pad)
+
             crop = img[y1p:y2p, x1p:x2p]
             if crop.size == 0:
                 continue
 
-            try:
-                with torch.no_grad():
-                    masks = mask_generator.generate(crop)
-            except torch.OutOfMemoryError:
-                print(f"[OOM] Skip box {x1},{y1},{x2},{y2}")
-                if DEVICE == "cuda":
-                    torch.cuda.empty_cache()
-                continue
-
+            with torch.no_grad():
+                masks = mask_generator.generate(crop)
             if not masks:
                 continue
 
-            def mask_iou(mask, box):
-                x1, y1, x2, y2 = box
-                mask_box = np.zeros(mask.shape[:2], dtype=np.uint8)
-                mask_box[y1:y2, x1:x2] = 1
-                inter = np.logical_and(mask > 0, mask_box > 0).sum()
-                union = np.logical_or(mask > 0, mask_box > 0).sum()
-                return inter / (union + 1e-6)
-
-            best_mask = max(masks, key=lambda m: mask_iou(np.array(m["segmentation"], dtype=np.uint8),
-                                                        [0, 0, crop.shape[1], crop.shape[0]]))
+            best_mask = max(
+                masks,
+                key=lambda m: np.sum(np.array(m["segmentation"], dtype=np.uint8))
+            )
             segmentation = np.array(best_mask["segmentation"], dtype=np.uint8)
 
             seg_coords = np.column_stack(np.where(segmentation > 0))
-            seg_coords[:, [0, 1]] = seg_coords[:, [1, 0]]
+            seg_coords[:, [0,1]] = seg_coords[:, [1,0]]
             seg_coords[:, 0] += x1p
             seg_coords[:, 1] += y1p
+
             segmentation_flat = seg_coords.flatten().tolist()
 
-
             bbox = [x1, y1, x2 - x1, y2 - y1]
+
             annotations.append({
                 "id": ann_id,
                 "image_id": image_id,
@@ -190,32 +243,18 @@ for root, _, files in os.walk(RAW_DIR):
             ann_id += 1
             has_valid_box = True
 
-            color = (0, 255, 0)
-            mask_rgb = np.zeros_like(img, dtype=np.uint8)
 
-            seg_h, seg_w = segmentation.shape[:2]
-            crop_h, crop_w = y2 - y1, x2 - x1
-            if seg_h != crop_h or seg_w != crop_w:
-                segmentation_vis = cv2.resize(segmentation, (crop_w, crop_h), interpolation=cv2.INTER_NEAREST)
-            else:
-                segmentation_vis = segmentation
+            color = (0,255,0)
+            cv2.rectangle(overlay, (x1,y1), (x2,y2), color, 2)
+            cv2.putText(overlay, f"{label} ({conf:.2f})",
+                        (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
-            mask_region = (segmentation_vis > 0).astype(np.uint8)
-            mask_rgb[y1:y2, x1:x2][mask_region == 1] = color
-
-            overlay = cv2.addWeighted(overlay, 0.7, mask_rgb, 0.3, 0)
-            cv2.rectangle(overlay, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(overlay, f"{label} ({conf:.2f})", (x1, max(20, y1 - 10)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-            cv2.rectangle(overlay, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(overlay, f"{label} ({conf:.2f})", (x1, max(20, y1 - 10)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
         if has_valid_box:
-            label_dir = os.path.join(HYBRID_DATA_DIR, label)
-            os.makedirs(label_dir, exist_ok=True)
+            label_dir = HYBRID_DATA_DIR
             viz_name = f"{os.path.splitext(file_name)[0]}_viz.jpg"
             save_path = os.path.join(label_dir, viz_name)
+
             cv2.imwrite(save_path, overlay)
             rel_path = os.path.relpath(save_path, HYBRID_DATA_DIR)
             images.append({
@@ -249,3 +288,21 @@ print(f" → Classes ({len(categories)}): {list(categories.keys())}")
 print(f" → Total images: {len(images)} | Total annotations: {len(annotations)}")
 
 print("Done — annotation process completed successfully.")
+print("[ROBOFLOW] Uploading dataset...")
+
+valid_images = [
+    os.path.join(HYBRID_DATA_DIR, f)
+    for f in os.listdir(HYBRID_DATA_DIR)
+    if f.lower().endswith((".jpg", ".jpeg", ".png"))
+]
+
+
+# project.upload_dataset(
+#     image_dir=HYBRID_DATA_DIR,
+#     annotation_path=COCO_PATH,
+#     annotation_format="coco"
+# )
+
+
+
+print("[ROBOFLOW] Dataset upload complete.")
