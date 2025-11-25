@@ -362,10 +362,6 @@ class YOLO_SAM2_Detector:
     @torch.inference_mode()
     def infer_frame(self, frame, conf_thres=0.35, proto_sim_th=0.40):
         scale_factor = 1.0
-
-        """
-        YOLO detect → SAM2 refine mask (batch) → multi-object detection
-        """
         detections = []
 
         yolo_results = self.yolo.predict(frame, conf=conf_thres, verbose=False)
