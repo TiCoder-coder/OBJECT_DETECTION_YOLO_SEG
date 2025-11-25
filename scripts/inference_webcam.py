@@ -519,7 +519,6 @@ def run_webcam_hybrid():
             cls = d["cls"]
             class_counts[cls] = class_counts.get(cls, 0) + 1
 
-        # -------- DRAW HEADER BAR --------
         header_text = f"Detected: {total}  |  " + "  |  ".join([f"{cls}: {cnt}" for cls, cnt in class_counts.items()])
         (hh, ww) = out.shape[:2]
 
@@ -527,7 +526,6 @@ def run_webcam_hybrid():
         cv2.putText(out, header_text, (10, 28),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 220, 100), 2)
 
-        # -------- COLOR PALETTE --------
         cls_color_map = {
             "person": (0, 255, 170),
             "cup": (0, 220, 255),
@@ -539,7 +537,6 @@ def run_webcam_hybrid():
             "dining_table": (255, 90, 100),
         }
 
-        # -------- DRAW EACH OBJECT --------
         for d in tracked:
             x1, y1, x2, y2 = map(int, d["box"])
             cls = d["cls"]
@@ -547,10 +544,8 @@ def run_webcam_hybrid():
 
             color = cls_color_map.get(cls, (0, 255, 0))
 
-            # bounding box
             cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
 
-            # label background
             label = f"{cls} {score:.2f}"
             (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
 
@@ -559,11 +554,9 @@ def run_webcam_hybrid():
             cv2.putText(out, label, (x1 + 3, y1 - 5),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (20, 20, 20), 2)
 
-        # -------- FPS DISPLAY (Neon Glow Style, FIXED WIDTH) --------
         fps = 1.0 / (time.time() - start + 1e-6)
         fps_text = f"FPS: {fps:.1f}"
 
-        # lấy width/height real từ frame
         (hh, ww) = out.shape[:2]
 
         (font_w, font_h), _ = cv2.getTextSize(fps_text, cv2.FONT_HERSHEY_SIMPLEX, 0.75, 2)
@@ -575,8 +568,8 @@ def run_webcam_hybrid():
         y2 = y1 + font_h + 20
 
         overlay = out.copy()
-        cv2.rectangle(overlay, (x1, y1), (x2, y2), (30, 30, 30), -1)     # nền tối
-        cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 255, 255), 2)    # viền neon
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), (30, 30, 30), -1)
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 255, 255), 2)
 
         alpha = 0.25
         out = cv2.addWeighted(overlay, alpha, out, 1 - alpha, 0)
