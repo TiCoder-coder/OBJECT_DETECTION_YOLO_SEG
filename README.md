@@ -7,7 +7,6 @@ PROJECT_DETECT_OBJECT — Real-time Object Recognition System (YOLOv11 + SAM2.1 
     Hệ thống Realtime Object Detection & Segmentation kết hợp nhiều mô hình AI mạnh mẽ:
         - YOLOv11 (Pretrained) — Dò tìm vật thể nhanh và chính xác.
         - SAM2.1 (Segment Anything 2) — Phân vùng chính xác (segmentation) từng vật thể được YOLO phát hiện.
-        - ResNet18 (Custom Classifier) — Phân loại chi tiết từng vật thể dựa trên dữ liệu huấn luyện tùy chỉnh.
         - ImageSearcher (Embedding-based Similarity Search) — Khi xác suất thấp, hệ thống tìm vật thể tương tự trong thư viện annotated/.
         - Object Tracking + Label Stabilization — Theo dõi vật thể qua khung hình để tránh nhấp nháy nhãn.
         - Tất cả được xử lý real-time từ webcam, với giao diện hiển thị mask, bounding box, và tên vật thể ngay trên màn hình.
@@ -132,7 +131,6 @@ PROJECT_DETECT_OBJECT — Real-time Object Recognition System (YOLOv11 + SAM2.1 
 | ------------- | ------------------ | --------------------- |
 | YOLOv11       | Ultralytics        | Object Detection      |
 | SAM2.1        | Meta FAIR          | Mask Segmentation     |
-| ResNet18      | PyTorch            | Object Classification |
 | ImageSearcher | Custom             | Similarity Matching   |
 | Tracker       | Custom (IOU-based) | Temporal Stability    |
 
@@ -145,5 +143,7 @@ PROJECT_DETECT_OBJECT — Real-time Object Recognition System (YOLOv11 + SAM2.1 
 🧑‍💻 Tác giả
 
 👤 Vo Anh Nhat
+
 📍 Đại học Giao thông vận tải
+
 📧 Email: voanhnhat1612@gmail.com
